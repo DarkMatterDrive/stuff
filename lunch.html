@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Next AOB Lunch</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .header {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #888;
+            letter-spacing: 0.05em;
+            margin-bottom: 2rem;
+        }
+        
+        .countdown {
+            font-size: 4rem;
+            font-weight: 300;
+            letter-spacing: -0.02em;
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+        
+        .countdown span {
+            display: inline-block;
+            min-width: 80px;
+            transition: all 0.2s ease;
+        }
+        
+        .countdown span.changed {
+            color: #64ffda;
+            transform: translateY(-2px);
+        }
+        
+        .label {
+            font-size: 0.875rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        
+        .info {
+            margin-top: 2rem;
+            font-size: 0.875rem;
+            color: #555;
+        }
+        
+        .weekend {
+            font-size: 1.5rem;
+            color: #444;
+            margin-top: 2rem;
+        }
+        
+        .next-lunch {
+            font-size: 0.875rem;
+            color: #666;
+            margin-top: 1rem;
+        }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <div class="container">
+        <div class="header">Time until lunch</div>
+        <div class="countdown" id="countdown">--:--:--</div>
+        <div class="label" id="label"></div>
+        <div class="info" id="info"></div>
+    </div>
+
+    <script>
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        let previous = { h: -1, m: -1, s: -1 };
+
+        function pad(n) {
+            return n.toString().padStart(2, '0');
+        }
+
+        function update() {
+            const now = new Date();
+            const today = now.getDay(); // 0=Sun, 6=Sat
+
+            // Weekends: no lunch
+            if (today === 0 || today === 6) {
+                document.getElementById('countdown').textContent = 'Weekend';
+                document.getElementById('label').textContent = '';
+                document.getElementById('info').textContent = 'Next lunch Monday 11:27';
+                return;
+            }
+
+            const lunch = new Date(now);
+            const isThu = today === 4;
+            lunch.setHours(isThu ? 12 : 11, isThu ? 3 : 27, 0, 0);
+
+            // If lunch passed today, jump to next weekday
+            if (now > lunch) {
+                lunch.setDate(lunch.getDate() + (today === 5 ? 3 : 1));
+            }
+
+            const ms = lunch - now;
+            const h = Math.floor(ms / 3.6e6);
+            const m = Math.floor((ms % 3.6e6) / 6e4);
+            const s = Math.floor((ms % 6e4) / 1e3);
+
+            const els = [
+                { id: 'h', val: h },
+                { id: 'm', val: m },
+                { id: 's', val: s }
+            ];
+
+            let html = '';
+            els.forEach(({ id, val }) => {
+                const changed = previous[id] !== val;
+                html += `<span class="${changed ? 'changed' : ''}">${pad(val)}</span>`;
+                if (id !== 's') html += '<span>:</span>';
+                previous[id] = val;
+            });
+
+            document.getElementById('countdown').innerHTML = html;
+            document.getElementById('label').textContent = `${dayNames[lunch.getDay()]} ${pad(lunch.getHours())}:${pad(lunch.getMinutes())}`;
+            document.getElementById('info').textContent = '';
+        }
+
+        update();
+        setInterval(update, 1000);
+    </script>
+</body>
+</html>
