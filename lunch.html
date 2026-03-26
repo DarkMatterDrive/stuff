@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next AOB Lunch</title>
+    <title>AOB Lunch Countdown</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
         
@@ -26,7 +26,7 @@
         
         .container {
             text-align: center;
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
         }
         
@@ -63,76 +63,297 @@
             margin-top: 0.5rem;
         }
         
-        .info {
+        .explanation {
             margin-top: 2rem;
+            padding: 1.5rem;
+            background: #141414;
+            border-radius: 12px;
+            border-left: 3px solid #64ffda;
+            text-align: left;
+        }
+        
+        .explanation-title {
             font-size: 0.875rem;
-            color: #555;
+            font-weight: 600;
+            color: #64ffda;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         
-        .weekend {
-            font-size: 1.5rem;
+        .explanation-text {
+            font-size: 0.875rem;
+            color: #999;
+            line-height: 1.5;
+        }
+        
+        .override {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .override button {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #888;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .override button:hover {
+            background: #222;
+            border-color: #444;
+            color: #aaa;
+        }
+        
+        .override button.active {
+            background: #64ffda;
+            border-color: #64ffda;
+            color: #0a0a0a;
+        }
+        
+        .no-lunch {
+            font-size: 2rem;
             color: #444;
-            margin-top: 2rem;
+            margin: 2rem 0;
         }
         
-        .next-lunch {
+        .next-info {
             font-size: 0.875rem;
             color: #666;
             margin-top: 1rem;
         }
+        
+        .exception-badge {
+            display: inline-block;
+            background: #ff6b6b;
+            color: #fff;
+            font-size: 0.625rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            margin-left: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .early-badge {
+            background: #f0a500;
+        }
     </style>
-<base target="_blank">
 </head>
 <body>
     <div class="container">
-        <div class="header">Time until lunch</div>
+        <div class="header">AOB Lunch Countdown</div>
         <div class="countdown" id="countdown">--:--:--</div>
         <div class="label" id="label"></div>
-        <div class="info" id="info"></div>
+        
+        <div class="explanation" id="explanation" style="display: none;">
+            <div class="explanation-title" id="expTitle">Schedule</div>
+            <div class="explanation-text" id="expText"></div>
+            <div class="override" id="overrideButtons"></div>
+        </div>
+        
+        <div class="next-info" id="nextInfo"></div>
     </div>
 
     <script>
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        let manualOverride = null;
         let previous = { h: -1, m: -1, s: -1 };
+
+        // Exception dates (YYYY-MM-DD)
+        const exceptions = {
+            '2026-03-26': { type: 'long-thursday', name: 'Long Day Thursday' },
+            '2026-03-27': { type: 'half-friday', name: 'Half Day Friday' },
+            '2025-12-18': { type: 'long-thursday', name: 'Long Day Thursday' },
+            '2025-12-19': { type: 'half-friday', name: 'Half Day Friday' },
+        };
+
+        // Break periods
+        const breaks = [
+            { start: '2026-03-30', end: '2026-04-06', name: 'Spring Break' },
+            { start: '2026-02-25', end: '2026-03-02', name: 'Winter Break' },
+        ];
 
         function pad(n) {
             return n.toString().padStart(2, '0');
         }
 
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        function isBreak(date) {
+            const dateStr = formatDate(date);
+            for (const b of breaks) {
+                if (dateStr >= b.start && dateStr <= b.end) return b.name;
+            }
+            return null;
+        }
+
+        function getException(date) {
+            return exceptions[formatDate(date)] || null;
+        }
+
+        function getLunchTime(date, override = null) {
+            const day = date.getDay();
+            const exc = getException(date);
+            
+            const effectiveType = override || (exc ? exc.type : null);
+            
+            // Regular schedule (Mon, Tue, Wed, Fri)
+            if (day >= 1 && day <= 5 && day !== 4) {
+                if (effectiveType === 'half-friday' && day === 5) {
+                    // Half day Friday - early dismissal, no lunch or different timing
+                    return null; // Or adjust if half days have lunch
+                }
+                // Normal day: Lunch starts at 11:39 AM (or 11:27 AM if skipping mentor minutes)
+                return { 
+                    hour: 11, 
+                    minute: 39, 
+                    earlyHour: 11,
+                    earlyMinute: 27,
+                    type: 'regular', 
+                    name: 'Regular Day',
+                    mentorMinutes: '11:27 – 11:39'
+                };
+            }
+            
+            // Thursday
+            if (day === 4) {
+                if (effectiveType === 'long-thursday') {
+                    // Long day Thursday - uses regular schedule
+                    return { 
+                        hour: 11, 
+                        minute: 39, 
+                        earlyHour: 11,
+                        earlyMinute: 27,
+                        type: 'long-thursday', 
+                        name: 'Long Day Thursday',
+                        mentorMinutes: '11:27 – 11:39'
+                    };
+                }
+                // Normal Thursday early dismissal - no lunch period
+                return null;
+            }
+            
+            return null;
+        }
+
         function update() {
             const now = new Date();
-            const today = now.getDay(); // 0=Sun, 6=Sat
-
-            // Weekends: no lunch
-            if (today === 0 || today === 6) {
-                document.getElementById('countdown').textContent = 'Weekend';
-                document.getElementById('label').textContent = '';
-                document.getElementById('info').textContent = 'Next lunch Monday 11:27';
+            const today = now.getDay();
+            
+            // Check if currently in a break
+            const breakName = isBreak(now);
+            if (breakName) {
+                document.getElementById('countdown').textContent = breakName;
+                document.getElementById('label').textContent = 'No classes';
+                document.getElementById('explanation').style.display = 'none';
+                document.getElementById('nextInfo').textContent = 'Classes resume after break';
                 return;
             }
 
-            const lunch = new Date(now);
-            const isThu = today === 4;
-            lunch.setHours(isThu ? 12 : 11, isThu ? 3 : 27, 0, 0);
-
-            // If lunch passed today, jump to next weekday
-            if (now > lunch) {
-                lunch.setDate(lunch.getDate() + (today === 5 ? 3 : 1));
+            // Check if weekend
+            if (today === 0 || today === 6) {
+                document.getElementById('countdown').textContent = 'Weekend';
+                document.getElementById('label').textContent = 'No classes';
+                showExplanation('weekend');
+                document.getElementById('nextInfo').textContent = 'Next lunch Monday at 11:39 AM (or 11:27 AM if skipping mentor minutes)';
+                return;
             }
 
-            const ms = lunch - now;
+            const lunch = getLunchTime(now, manualOverride);
+            const exc = getException(now);
+
+            if (!lunch) {
+                // No lunch today (normal Thursday or half day)
+                const isHalfDay = manualOverride === 'half-friday' || (exc && exc.type === 'half-friday');
+                document.getElementById('countdown').textContent = 'No Lunch';
+                document.getElementById('label').innerHTML = isHalfDay ? 
+                    'Half Day <span class="exception-badge">Early Dismissal</span>' : 
+                    'Early Dismissal <span class="exception-badge early-badge">12:08 PM</span>';
+                showExplanation(isHalfDay ? 'half-day' : 'no-lunch-thursday', exc);
+                
+                // Find next lunch
+                let nextDate = new Date(now);
+                nextDate.setDate(nextDate.getDate() + 1);
+                while (nextDate.getDay() === 0 || nextDate.getDay() === 6 || isBreak(nextDate) || getLunchTime(nextDate) === null) {
+                    nextDate.setDate(nextDate.getDate() + 1);
+                }
+                const nextLunch = getLunchTime(nextDate);
+                document.getElementById('nextInfo').textContent = `Next lunch ${dayNames[nextDate.getDay()]} at ${pad(nextLunch.hour)}:${pad(nextLunch.minute)} (or ${pad(nextLunch.earlyHour)}:${pad(nextLunch.earlyMinute)} if skipping mentor minutes)`;
+                return;
+            }
+
+            // Determine which lunch time to use based on current time
+            // If it's past 11:27 but before 11:39, show both options or default to 11:39
+            // If it's before 11:27, countdown to 11:27 (early option)
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTime = currentHour * 60 + currentMinute;
+            
+            const earlyLunchTime = lunch.earlyHour * 60 + lunch.earlyMinute; // 11:27 = 687
+            const regularLunchTime = lunch.hour * 60 + lunch.minute; // 11:39 = 699
+            
+            let targetHour, targetMinute, isEarly;
+            
+            if (currentTime < earlyLunchTime) {
+                // Before 11:27 - countdown to early lunch
+                targetHour = lunch.earlyHour;
+                targetMinute = lunch.earlyMinute;
+                isEarly = true;
+            } else {
+                // After 11:27 - countdown to regular lunch or already in lunch
+                targetHour = lunch.hour;
+                targetMinute = lunch.minute;
+                isEarly = false;
+            }
+
+            // Set lunch time
+            const lunchDate = new Date(now);
+            lunchDate.setHours(targetHour, targetMinute, 0, 0);
+
+            // If lunch passed, find next
+            if (now > lunchDate) {
+                let nextDate = new Date(now);
+                nextDate.setDate(nextDate.getDate() + 1);
+                
+                while (true) {
+                    if (isBreak(nextDate)) {
+                        nextDate.setDate(nextDate.getDate() + 1);
+                        continue;
+                    }
+                    const nextLunch = getLunchTime(nextDate);
+                    if (nextLunch) {
+                        lunchDate.setDate(nextDate.getDate());
+                        lunchDate.setHours(nextLunch.hour, nextLunch.minute, 0, 0);
+                        isEarly = false;
+                        break;
+                    }
+                    nextDate.setDate(nextDate.getDate() + 1);
+                }
+            }
+
+            const ms = lunchDate - now;
             const h = Math.floor(ms / 3.6e6);
             const m = Math.floor((ms % 3.6e6) / 6e4);
             const s = Math.floor((ms % 6e4) / 1e3);
 
-            const els = [
+            // Build countdown HTML
+            const parts = [
                 { id: 'h', val: h },
                 { id: 'm', val: m },
                 { id: 's', val: s }
             ];
 
             let html = '';
-            els.forEach(({ id, val }) => {
+            parts.forEach(({ id, val }) => {
                 const changed = previous[id] !== val;
                 html += `<span class="${changed ? 'changed' : ''}">${pad(val)}</span>`;
                 if (id !== 's') html += '<span>:</span>';
@@ -140,8 +361,85 @@
             });
 
             document.getElementById('countdown').innerHTML = html;
-            document.getElementById('label').textContent = `${dayNames[lunch.getDay()]} ${pad(lunch.getHours())}:${pad(lunch.getMinutes())}`;
-            document.getElementById('info').textContent = '';
+            
+            const timeStr = `${pad(targetHour)}:${pad(targetMinute)}`;
+            const badge = exc ? ` <span class="exception-badge">${exc.name}</span>` : '';
+            const earlyLabel = isEarly ? ' (skip mentor minutes)' : '';
+            document.getElementById('label').innerHTML = `${dayNames[lunchDate.getDay()]} Lunch ${timeStr}${earlyLabel}${badge}`;
+            
+            showExplanation(lunch.type, exc, isEarly);
+            document.getElementById('nextInfo').textContent = '';
+        }
+
+        function showExplanation(type, exception = null, isEarly = false) {
+            const expDiv = document.getElementById('explanation');
+            const expTitle = document.getElementById('expTitle');
+            const expText = document.getElementById('expText');
+            const overrideDiv = document.getElementById('overrideButtons');
+            
+            expDiv.style.display = 'block';
+            overrideDiv.innerHTML = '';
+
+            const explanations = {
+                'regular': {
+                    title: 'Regular Schedule',
+                    text: isEarly ? 
+                        'Block 2 ends at 11:27 AM. You can head to lunch early (skipping mentor minutes 11:27-11:39) or wait for the official lunch start at 11:39 AM.' :
+                        'Standard schedule: Block 2 (10:00-11:27), optional Mentor Minutes (11:27-11:39), Lunch (11:39-12:09), then Block 4 at 12:11.',
+                    override: { type: 'half-friday', label: 'Half day today?', text: 'Friday before break - early dismissal' }
+                },
+                'long-thursday': {
+                    title: exception ? exception.name : 'Long Day Thursday',
+                    text: isEarly ?
+                        'This Thursday follows the regular full-day schedule. You can go to lunch at 11:27 AM (skipping mentor minutes) or 11:39 AM.' :
+                        'Exception: Full Thursday schedule with regular lunch timing (11:39 AM, or 11:27 AM if skipping mentor minutes).',
+                    override: { type: 'early-thursday', label: 'Not a long day?', text: 'Normal Thursday early dismissal (no lunch)' }
+                },
+                'half-day': {
+                    title: exception ? exception.name : 'Half Day',
+                    text: 'Shortened day before break. Early dismissal schedule - no lunch period.',
+                    override: { type: 'regular', label: 'Not a half day?', text: 'Regular full day schedule' }
+                },
+                'no-lunch-thursday': {
+                    title: 'Early Dismissal Thursday',
+                    text: 'Regular Thursday: Blocks 1-4 with dismissal at 12:08 PM. No lunch period on early dismissal days.',
+                    override: { type: 'long-thursday', label: 'Not a half day?', text: 'This is actually a full day with lunch' }
+                },
+                'weekend': {
+                    title: 'Weekend',
+                    text: 'No classes Saturday-Sunday. Monday: Block 2 ends 11:27 AM, lunch 11:39 AM (or skip mentor minutes and go at 11:27).'
+                }
+            };
+
+            const exp = explanations[type] || explanations['regular'];
+            expTitle.textContent = exp.title;
+            expText.textContent = exp.text;
+
+            // Add override button if applicable
+            if (exp.override) {
+                const btn = document.createElement('button');
+                btn.textContent = exp.override.label;
+                btn.onclick = () => {
+                    if (manualOverride === exp.override.type) {
+                        manualOverride = null;
+                        btn.classList.remove('active');
+                    } else {
+                        manualOverride = exp.override.type;
+                        // Clear previous values to force animation
+                        previous = { h: -1, m: -1, s: -1 };
+                        
+                        // Update button states
+                        const buttons = overrideDiv.querySelectorAll('button');
+                        buttons.forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        
+                        // Update explanation text
+                        expText.textContent = exp.override.text;
+                    }
+                    update();
+                };
+                overrideDiv.appendChild(btn);
+            }
         }
 
         update();
