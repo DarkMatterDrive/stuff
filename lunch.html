@@ -113,6 +113,7 @@
             margin-top: 0.75rem;
             display: flex;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
         
         .override button {
@@ -177,6 +178,75 @@
             background: #64ffda;
             transition: width 1s linear;
         }
+        
+        .schedule-list {
+            margin-top: 1rem;
+            border: 1px solid #222;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .schedule-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 0.8125rem;
+        }
+        
+        .schedule-item:last-child {
+            border-bottom: none;
+        }
+        
+        .schedule-item.current {
+            background: #1a2a25;
+            color: #64ffda;
+        }
+        
+        .schedule-item.past {
+            color: #444;
+        }
+        
+        .schedule-item .block-name {
+            font-weight: 500;
+        }
+        
+        .schedule-item .block-time {
+            color: #666;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.75rem;
+        }
+        
+        .schedule-item.current .block-time {
+            color: #64ffda;
+        }
+        
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            color: #555;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.2s;
+        }
+        
+        .toggle-btn:hover {
+            color: #888;
+        }
+        
+        .toggle-btn::after {
+            content: '→';
+            transition: transform 0.2s;
+        }
+        
+        .toggle-btn.expanded::after {
+            transform: rotate(90deg);
+        }
     </style>
 </head>
 <body>
@@ -187,6 +257,7 @@
     <script>
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         let manualOverride = null;
+        let showAllBlocks = false;
         let previous = { h: -1, m: -1, s: -1 };
 
         // Schedule data
@@ -204,6 +275,14 @@
             { name: 'Block 2', start: '9:25', end: '10:18', type: 'class' },
             { name: 'Block 3', start: '10:20', end: '11:13', type: 'class' },
             { name: 'Block 4', start: '11:15', end: '12:08', type: 'class' }
+        ];
+
+        // Half day schedule (approximate based on early dismissal)
+        const halfDaySchedule = [
+            { name: 'Block 1', start: '8:30', end: '9:16', type: 'class' },
+            { name: 'Block 2', start: '9:20', end: '10:06', type: 'class' },
+            { name: 'Block 3', start: '10:10', end: '10:56', type: 'class' },
+            { name: 'Block 4', start: '11:00', end: '11:46', type: 'class' }
         ];
 
         const exceptions = {
@@ -250,7 +329,7 @@
 
             if (day === 0 || day === 6) return { type: 'weekend', schedule: null };
             if (day === 4 && effectiveType !== 'long-thursday') return { type: 'thursday', schedule: thursdaySchedule };
-            if (effectiveType === 'half-friday' && day === 5) return { type: 'half-day', schedule: null };
+            if (effectiveType === 'half-friday' && day === 5) return { type: 'half-day', schedule: halfDaySchedule };
             
             return { type: 'regular', schedule: regularSchedule };
         }
@@ -323,6 +402,29 @@
             return { h, m, s };
         }
 
+        function renderScheduleList(schedule, currentBlock) {
+            if (!showAllBlocks || !schedule) return '';
+            
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            
+            const items = schedule.map((block, index) => {
+                const start = timeToMinutes(block.start);
+                const end = timeToMinutes(block.end);
+                const isCurrent = currentMinutes >= start && currentMinutes < end;
+                const isPast = currentMinutes >= end;
+                
+                return `
+                    <div class="schedule-item ${isCurrent ? 'current' : ''} ${isPast ? 'past' : ''}">
+                        <span class="block-name">${block.name}</span>
+                        <span class="block-time">${block.start}-${block.end}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            return `<div class="schedule-list">${items}</div>`;
+        }
+
         function update() {
             const now = new Date();
             const today = now.getDay();
@@ -345,9 +447,14 @@
                 return;
             }
 
-            // Handle half day (no lunch)
+            // Handle half day
             if (type === 'half-day') {
-                renderNoLunch('Half Day', 'Early dismissal today - no lunch period', exc);
+                const currentBlock = getCurrentBlock(schedule, currentMinutes);
+                if (currentBlock?.type === 'after') {
+                    renderAfterSchool('Half Day Complete', exc, schedule);
+                } else {
+                    renderBlockCountdown(currentBlock, schedule, type, exc);
+                }
                 return;
             }
 
@@ -355,7 +462,7 @@
             if (type === 'thursday') {
                 const currentBlock = getCurrentBlock(schedule, currentMinutes);
                 if (currentBlock?.type === 'after') {
-                    renderAfterSchool('Thursday Early Dismissal', exc);
+                    renderAfterSchool('Thursday Early Dismissal', exc, schedule);
                 } else {
                     renderBlockCountdown(currentBlock, schedule, type, exc);
                 }
@@ -366,7 +473,7 @@
             const currentBlock = getCurrentBlock(schedule, currentMinutes);
             
             if (!currentBlock || currentBlock.type === 'after') {
-                renderAfterSchool('School Day Complete', exc);
+                renderAfterSchool('School Day Complete', exc, schedule);
                 return;
             }
 
@@ -396,31 +503,14 @@
                     <div class="sub-info">Monday: Block 2 ends 11:27 AM</div>
                     <div class="next-block" style="margin-top: 2rem;">
                         <div class="next-label">Next Lunch</div>
-                        <div class="next-name">Monday 11:39 AM</div>
-                        <div class="next-time">Or 11:27 AM if skipping mentor minutes</div>
+                        <div class="next-name">Monday 11:27 AM</div>
+                        <div class="next-time">Early option (skip mentor minutes)</div>
                     </div>
                 </div>
             `;
         }
 
-        function renderNoLunch(title, text, exc) {
-            const app = document.getElementById('app');
-            const badge = exc ? `<span class="exception-badge">${exc.name}</span>` : '';
-            
-            app.innerHTML = `
-                <div class="status-card">
-                    <div class="current-state">Schedule</div>
-                    <div class="main-display after-school">${title}${badge}</div>
-                    <div class="sub-info">${text}</div>
-                    <div class="explanation active">
-                        <div class="explanation-text">${text}</div>
-                        ${renderOverrideButtons('half-day')}
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderAfterSchool(title, exc) {
+        function renderAfterSchool(title, exc, schedule = null) {
             const app = document.getElementById('app');
             const badge = exc ? `<span class="exception-badge">${exc.name}</span>` : '';
             
@@ -431,16 +521,37 @@
             
             while (searchLimit > 0) {
                 const breakName = isBreak(nextDate);
-                const { type: nextType } = getSchedule(nextDate);
+                const { type: nextType, schedule: nextSchedule } = getSchedule(nextDate);
                 
-                if (!breakName && nextType !== 'weekend' && nextType !== 'half-day' && nextType !== 'thursday') {
-                    break;
+                if (!breakName && nextType !== 'weekend') {
+                    // Check if it has lunch
+                    const hasLunch = nextSchedule && nextSchedule.some(b => b.type === 'lunch' || b.type === 'optional');
+                    if (hasLunch || nextType === 'half-day') break;
                 }
                 nextDate.setDate(nextDate.getDate() + 1);
                 searchLimit--;
             }
             
+            const { schedule: nextSchedule } = getSchedule(nextDate);
             const nextDayName = dayNames[nextDate.getDay()];
+            const earlyLunch = nextSchedule?.find(b => b.type === 'optional');
+            const regularLunch = nextSchedule?.find(b => b.type === 'lunch');
+            
+            let nextLunchText = '';
+            if (earlyLunch) {
+                nextLunchText = `${nextDayName} ${earlyLunch.start} (early) or ${regularLunch?.start || '11:39'}`;
+            } else if (nextSchedule) {
+                // Half day or other - just show dismissal
+                const lastBlock = nextSchedule[nextSchedule.length - 1];
+                nextLunchText = `${nextDayName} ends ${lastBlock.end}`;
+            }
+            
+            const scheduleList = renderScheduleList(schedule, null);
+            const toggleBtn = schedule ? `
+                <button class="toggle-btn ${showAllBlocks ? 'expanded' : ''}" onclick="toggleSchedule()">
+                    ${showAllBlocks ? 'Hide' : 'Show'} all blocks
+                </button>
+            ` : '';
             
             app.innerHTML = `
                 <div class="status-card">
@@ -448,10 +559,11 @@
                     <div class="main-display after-school">${title}${badge}</div>
                     <div class="sub-info">See you tomorrow</div>
                     <div class="next-block">
-                        <div class="next-label">Next Lunch</div>
-                        <div class="next-name">${nextDayName} 11:27 AM</div>
-                        <div class="next-time">Early option (skip mentor minutes)</div>
+                        <div class="next-label">Next</div>
+                        <div class="next-name">${nextLunchText || 'School tomorrow'}</div>
                     </div>
+                    ${scheduleList}
+                    ${toggleBtn}
                 </div>
             `;
         }
@@ -464,33 +576,28 @@
             let isLunchRelated = false;
             
             if (current.type === 'before') {
-                // Before school - countdown to start
                 targetTime = new Date(now);
                 targetTime.setHours(Math.floor(current.nextStart / 60), current.nextStart % 60, 0);
                 displayText = current.nextBlock.name;
                 subText = `Starts ${current.nextBlock.start}`;
                 nextBlockInfo = getNextBlockInfo(schedule, 0);
             } else if (current.type === 'passing') {
-                // Passing time - countdown to next
                 targetTime = new Date(now);
                 targetTime.setHours(Math.floor(current.nextStart / 60), current.nextStart % 60, 0);
                 displayText = current.nextBlock.name;
                 subText = `Starts ${current.nextBlock.start}`;
                 nextBlockInfo = getNextBlockInfo(schedule, current.index + 1);
             } else if (current.type === 'optional') {
-                // Mentor minutes - show lunch options
                 const regularLunchStart = timeToMinutes('11:39');
                 const currentMinutes = now.getHours() * 60 + now.getMinutes();
                 
                 if (currentMinutes < regularLunchStart) {
-                    // Still in mentor minutes, countdown to regular lunch
                     targetTime = new Date(now);
                     targetTime.setHours(11, 39, 0);
                     displayText = 'Lunch';
                     subText = 'Regular lunch starts 11:39';
                     isLunchRelated = true;
                 } else {
-                    // In lunch already
                     targetTime = new Date(now);
                     targetTime.setHours(12, 9, 0);
                     displayText = 'Lunch Ends';
@@ -499,7 +606,6 @@
                 }
                 nextBlockInfo = schedule.find(b => b.name === 'Block 4');
             } else if (current.type === 'lunch') {
-                // In lunch
                 targetTime = new Date(now);
                 targetTime.setHours(12, 9, 0);
                 displayText = 'Lunch Ends';
@@ -507,7 +613,6 @@
                 isLunchRelated = true;
                 nextBlockInfo = schedule.find(b => b.name === 'Block 4');
             } else {
-                // Regular class block
                 const endMinutes = timeToMinutes(current.end);
                 targetTime = new Date(now);
                 targetTime.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0);
@@ -519,7 +624,6 @@
             const ms = targetTime - now;
             const { h, m, s } = formatDuration(ms);
             
-            // Update previous for animation
             const timeChanged = previous.h !== h || previous.m !== m || previous.s !== s;
             previous = { h, m, s };
             
@@ -562,6 +666,15 @@
                         ${renderOverrideButtons('thursday')}
                     </div>
                 `;
+            } else if (type === 'half-day') {
+                explanationHtml = `
+                    <div class="explanation">
+                        <div class="explanation-text">
+                            Half day schedule with early dismissal. No lunch period today.
+                        </div>
+                        ${renderOverrideButtons('half-day')}
+                    </div>
+                `;
             } else if (isLunchRelated) {
                 explanationHtml = `
                     <div class="explanation ${current.type === 'lunch' ? 'active' : ''}">
@@ -572,6 +685,13 @@
                     </div>
                 `;
             }
+            
+            const scheduleList = renderScheduleList(schedule, current);
+            const toggleBtn = `
+                <button class="toggle-btn ${showAllBlocks ? 'expanded' : ''}" onclick="toggleSchedule()">
+                    ${showAllBlocks ? 'Hide' : 'Show'} all blocks
+                </button>
+            `;
             
             app.innerHTML = `
                 <div class="status-card">
@@ -585,6 +705,8 @@
                     ` : ''}
                     ${nextBlockHtml}
                     ${explanationHtml}
+                    ${scheduleList}
+                    ${toggleBtn}
                 </div>
             `;
         }
@@ -602,6 +724,11 @@
         window.toggleOverride = function(type) {
             manualOverride = manualOverride === type ? null : type;
             previous = { h: -1, m: -1, s: -1 };
+            update();
+        };
+
+        window.toggleSchedule = function() {
+            showAllBlocks = !showAllBlocks;
             update();
         };
 
